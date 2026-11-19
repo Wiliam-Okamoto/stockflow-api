@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class ProductCreate(BaseModel):
@@ -30,3 +30,23 @@ class ProductResponse(BaseModel):
 class StockMovementCreate(BaseModel):
     movement_type: Literal["in", "out"] = Field(..., description="'in' para entrada ou 'out' para saída")
     quantity: int = Field(..., gt=0, description="Quantidade movimentada deve ser maior que zero")
+
+
+class UserCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=100)
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    email: EmailStr
+    is_active: bool
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
