@@ -1,15 +1,18 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.database import Base, engine, get_db
+from app.models import Product
 from app.schemas import ProductCreate, ProductResponse
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="StockFlow API",
     description="API REST para controle de estoque com FastAPI",
-    version="0.1.0",
+    version="0.2.0",
 )
-
-products_db: list[ProductResponse] = []
-next_id = 1
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)
@@ -18,26 +21,24 @@ def health_check() -> dict[str, str]:
 
 
 @app.post("/products", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
-def create_product(payload: ProductCreate) -> ProductResponse:
-    global next_id
-
-    if any(item.sku.lower() == payload.sku.lower() for item in products_db):
+def create_product(payload: ProductCreate, db: Session = Depends(get_db)) -> Product:
+    existing_product = db.scalar(
+        select(Product).where(Product.sku.ilike(payload.sku))
+    )
+    if existing_product:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Já existe um produto cadastrado com esse SKU.",
         )
 
-    product = ProductResponse(id=next_id, **payload.model_dump())
-    next_id += 1
-    products_db.append(product)
+    product = Product(**payload.model_dump())
+    db.add(product)
+    db.commit()
+    db.refresh(product)
     return product
 
 
 @app.get("/products", response_model=list[ProductResponse], status_code=status.HTTP_200_OK)
-def list_products() -> list[ProductResponse]:
-    return products_db
-
-
-@app.get("/", status_code=status.HTTP_200_OK)
-def root() -> dict[str, str]:
-    return {"message": "StockFlow API rodando. Acesse /docs para testar."}
+def list_products(db: Session = Depends(get_db)) -> list[Product]:
+    products = db.scalars(select(Product).order_by(Product.id)).all()
+    return list(products)
